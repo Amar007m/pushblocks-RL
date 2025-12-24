@@ -52,6 +52,7 @@ class PushBlocksGymEnv(gym.Env):
         self.state: State = None  # type: ignore
         self.steps = 0
         self.prev_on_goal = 0
+        self.last_action = None
 
     def _min_goal_dist(self, block_pos):
         bx, by = block_pos
@@ -64,6 +65,7 @@ class PushBlocksGymEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+        self.last_action = None
         self.state = State(
             player=self.level.player_start,
             blocks=frozenset(self.level.blocks_start),
@@ -88,7 +90,9 @@ class PushBlocksGymEnv(gym.Env):
         PUSH_BONUS = 0.05              # nur fürs "Push passiert"
         PROGRESS_COEF = 0.7            # shaping über Distanz
         GOOD_PUSH_BONUS = 0.15         # extra wenn push Fortschritt bringt
-        BAD_PUSH_PENALTY = -0.15       # wenn push schlechter macht
+        BAD_PUSH_PENALTY = -0.15
+        REVERSE_PENALTY = -0.03
+        REV = {0:1, 1:0, 2:3, 3:2}       # wenn push schlechter macht
 
         reward = 0.0
         terminated = False
@@ -103,6 +107,7 @@ class PushBlocksGymEnv(gym.Env):
         reward += STEP_PENALTY
 
         nxt = apply_action(self.level, self.state, int(action))
+        self.last_action = int(action)
         if nxt is None:
             reward += ILLEGAL_PENALTY
             nxt = self.state
@@ -136,6 +141,10 @@ class PushBlocksGymEnv(gym.Env):
         elif on_goal < self.prev_on_goal:
             reward -= 2.0 * (self.prev_on_goal - on_goal)
         self.prev_on_goal = on_goal
+
+        # penalty for reversing last action
+        if self.last_action is not None and REV[action] == self.last_action:
+            reward += REVERSE_PENALTY
 
         solved = is_solved(self.state.blocks, self.level.goals)
         if solved:
@@ -199,7 +208,7 @@ def make_env(level_name: str, max_steps: int, seed: int):
 
 
 def main():
-    level_name = "L1"
+    level_name = "L2"
 
     # --- SPEED SETTINGS ---
     n_envs = 2          # number of parallel processes (try 4/8/12 depending on CPU)
@@ -219,7 +228,7 @@ def main():
     #   rollout_steps = n_steps * n_envs
     # Keep rollout ~ 2048-8192 to be reasonable.
     finetune_target = f'pushblocks_ppo_{level_name}.zip'
-    pretrained = "pushblocks_ppo_L0.zip"
+    pretrained = "pushblocks_ppo_L1.zip"
 
     if os.path.exists(finetune_target):
         print(f"🔄 Loading existing model: {finetune_target}")
@@ -244,7 +253,7 @@ def main():
     # Optional: checkpoints so you can test early without waiting
     os.makedirs("checkpoints", exist_ok=True)
     checkpoint_cb = CheckpointCallback(
-        save_freq=25_000,            # global timesteps
+        save_freq=10_000,            # global timesteps
         save_path="checkpoints",
         name_prefix=f"ppo_{level_name}",
     )
