@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# RL / Stable-Baselines outputs
+*.zip
+checkpoints/
+logs/
+tensorboard/
+*.pth
+*.pt
+
+# Optional: data / local stuff
+.env
